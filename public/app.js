@@ -316,6 +316,64 @@ function teamProjectedScore(squad){
   const xi=squad.filter(x=>Number(x.pick.multiplier)>0).slice(0,11); const use=xi.length===11?xi:optimalXI(squad);
   return use.reduce((sum,x)=>sum+projectedPoints(x)*Math.max(1,Number(x.pick.multiplier)||1),0);
 }
+function squadMarketValue(squad){
+  return squad.reduce((sum,x)=>sum+Number(x.player.now_cost||0),0)/10;
+}
+function declaredTeamValue(picks, manager){
+  const value=picks?.entry_history?.value ?? manager?.last_deadline_value;
+  return value == null ? null : Number(value)/10;
+}
+function declaredBank(picks, manager){
+  const bank=picks?.entry_history?.bank ?? manager?.last_deadline_bank;
+  return bank == null ? null : Number(bank)/10;
+}
+function valueTrend(currentPicks, previousPicks, history){
+  const currentEvent=Number(currentPicks?.entry_history?.event||0);
+  const previousHistory=[...(history?.current||[])]
+    .filter(row=>Number(row.event)<currentEvent)
+    .sort((a,b)=>Number(b.event)-Number(a.event))[0];
+  const currentValue=declaredTeamValue(currentPicks);
+  const previousValue=previousHistory?.value == null ? null : Number(previousHistory.value)/10;
+  return {
+    previousValue,
+    delta: currentValue == null || previousValue == null ? null : currentValue-previousValue,
+    event: previousHistory?.event || null,
+    lineupDelta: previousPicks ? squadMarketValue(
+      currentPicks.picks.map(pk=>({player:state.playersById.get(pk.element)})).filter(x=>x.player)
+    ) - squadMarketValue(
+      previousPicks.picks.map(pk=>({player:state.playersById.get(pk.element)})).filter(x=>x.player)
+    ) : null,
+  };
+}
+function opponentValueModel(opp, oppSquad){
+  const declared=declaredTeamValue(opp.picks,opp.manager);
+  const market=squadMarketValue(oppSquad);
+  const bank=declaredBank(opp.picks,opp.manager);
+  const trend=valueTrend(opp.picks,opp.previousPicks,opp.history);
+  const total=declared ?? (market+(bank||0));
+  return {declared,market,bank,total,trend};
+}
+function valueAdvice(mySquad, opp, oppSquad){
+  const mineMarket=squadMarketValue(mySquad);
+  const mineDeclared=declaredTeamValue(state.picks,state.manager);
+  const mineTotal=mineDeclared ?? (mineMarket+(declaredBank(state.picks,state.manager)||0));
+  const model=opponentValueModel(opp,oppSquad);
+  const gap=model.total-mineTotal;
+  const trend=model.trend.delta;
+  let action='Giữ cấu trúc';
+  let reason='Không chase team value; ưu tiên xPts, minutes và fixture của từng cầu thủ.';
+  if(gap>=3.0){
+    action='Không đua giá trị';
+    reason=`Đối thủ có lợi thế khoảng £${gap.toFixed(1)}m; hãy tìm differential có xPts cao thay vì copy premium.`;
+  }else if(gap<=-3.0){
+    action='Khai thác budget gap';
+    reason=`Bạn đang hơn khoảng £${Math.abs(gap).toFixed(1)}m về giá trị ước tính; có thể ưu tiên 1 upgrade đúng fixture nếu xPts tăng rõ.`;
+  }else if(trend!=null && trend<=-1.5){
+    action='Theo dõi bán tài sản';
+    reason='Giá trị khai báo của đối thủ đang giảm; không cần phòng thủ bằng transfer trước khi có team news.';
+  }
+  return {model,mineMarket,mineTotal,gap,action,reason};
+}
 function winProbability(delta){ return Math.max(.08,Math.min(.92,1/(1+Math.exp(-delta/7.5)))); }
 function h2hStrategy(prob,myDiff,opDiff,myCap,opCap){
   if(prob>=.62) return {mode:'SAFE',text:'Bạn đang cửa trên: giữ captain có xPts cao, ưu tiên minutes chắc và tránh transfer chỉ để cover đối thủ.'};
@@ -379,6 +437,7 @@ function recommendationHtml(rec, idx, context){
 function renderH2HRecommendations(mine,oppSquad,prob,delta,strat){
   const el=$('#h2hRecommendations'); if(!el) return;
   const recs=transferRecommendationPool(mine,oppSquad,prob);
+  const valuation=valueAdvice(mine,state.opponent,oppSquad);
   const cap=modelCaptainAdvice(mine,oppSquad,prob);
   const structural=mine.filter(x=>holdScore(x.player)<5 || startConfidence(x.player)<60).sort((a,b)=>(holdScore(a.player)+startConfidence(a.player)/100)-(holdScore(b.player)+startConfidence(b.player)/100));
   const weak=mine.filter(x=>holdScore(x.player)<6.3 || startConfidence(x.player)<75).sort((a,b)=>holdScore(a.player)-holdScore(b.player)).slice(0,4);
@@ -400,7 +459,8 @@ function renderH2HRecommendations(mine,oppSquad,prob,delta,strat){
   $('#recommendationMode').textContent=`${strat.mode} • ${state.ft} FT`;
   el.innerHTML=`
     <section class="recommend-block"><h3>⚔️ H2H — hành động GW này</h3><div class="sub">Tối ưu xác suất thắng nhưng không hy sinh đội hình chỉ để bắt chước đối thủ.</div>
-      <div class="rec-row"><div class="rec-title"><span class="${nowClass}">${nowAction}</span><span class="tag">WIN ${Math.round(prob*100)}%</span></div><div class="rec-reason">${nowReason}</div></div>${capHtml}${h2hRows}</section>
+      <div class="rec-row"><div class="rec-title"><span class="${nowClass}">${nowAction}</span><span class="tag">WIN ${Math.round(prob*100)}%</span></div><div class="rec-reason">${nowReason}</div></div>
+      <div class="rec-row"><div class="rec-title"><span>${valuation.action}</span><span class="tag">VALUE</span></div><div class="rec-reason">${valuation.reason}</div></div>${capHtml}${h2hRows}</section>
     <section class="recommend-block"><h3>📈 4–6 Gameweek</h3><div class="sub">Các move chỉ được xếp cao nếu Start confidence/Hold/xPts cùng cải thiện.</div>${longRows}</section>
     <section class="recommend-block"><h3>🧭 Cấu trúc cả mùa</h3><div class="sub">Không đánh giá chip/Wildcard chỉ bằng một H2H.</div>
       <div class="rec-row"><div class="rec-title">${wcText}</div></div>
@@ -414,10 +474,14 @@ async function loadOpponent(){
   const id=Number($('#opponentId').value); if(!id) return;
   setStatus(`Đang tải opponent ${id}…`);
   try{
-    const manager=await getJson(`/api/fpl/entry/${id}`);
+    const [manager,history]=await Promise.all([
+      getJson(`/api/fpl/entry/${id}`),
+      getJson(`/api/fpl/history/${id}`),
+    ]);
     const gw=state.picks?.entry_history?.event || Math.max(1,(state.gw?.id||1)-1);
     const picks=await getJson(`/api/fpl/picks/${id}/${gw}`);
-    state.opponent={id,manager,picks}; renderH2H(); setStatus(`Đã tải H2H với Team ${id}`,'good');
+    const previousPicks=gw>1 ? await getJson(`/api/fpl/picks/${id}/${gw-1}`).catch(()=>null) : null;
+    state.opponent={id,manager,history,picks,previousPicks}; renderH2H(); setStatus(`Đã tải H2H với Team ${id}`,'good');
   }catch(e){setStatus(`Không tải được opponent: ${e.message}`,'bad');}
 }
 function renderH2H(){
@@ -428,10 +492,15 @@ function renderH2H(){
   const myCap=mine.find(x=>x.pick.is_captain)?.player.web_name||'—', opCap=oppSquad.find(x=>x.pick.is_captain)?.player.web_name||'—';
   const myProj=teamProjectedScore(mine), opProj=teamProjectedScore(oppSquad), delta=myProj-opProj, prob=winProbability(delta), draw=Math.max(.05,.15-Math.abs(delta)*.008), lose=Math.max(0,1-prob-draw);
   const strat=h2hStrategy(prob,myDiff,opDiff,myCap,opCap);
+  const valuation=valueAdvice(mine,opp,oppSquad);
+  const valueModel=valuation.model;
+  const trendText=valueModel.trend.delta==null?'chưa đủ lịch sử':`${valueModel.trend.delta>=0?'+':''}£${valueModel.trend.delta.toFixed(1)}m so với GW${valueModel.trend.event||'trước'}`;
   const swing=[...myDiff.map(x=>({name:x.player.web_name,val:projectedPoints(x),side:'you'})),...opDiff.map(x=>({name:x.player.web_name,val:-projectedPoints(x),side:'opp'}))].sort((a,b)=>Math.abs(b.val)-Math.abs(a.val)).slice(0,5);
   $('#h2hSummary').innerHTML=`<div class="card-title">${escapeHtml(state.manager?.name||'You')} vs ${escapeHtml(opp.manager.name||`Team ${opp.id}`)}</div>
     <div class="h2h-prob"><div><strong>${Math.round(prob*100)}%</strong><span>Win</span></div><div><strong>${Math.round(draw*100)}%</strong><span>Draw</span></div><div><strong>${Math.round(lose*100)}%</strong><span>Lose</span></div></div>
     <div class="proj-line"><span>Projected</span><strong>${myProj.toFixed(1)} – ${opProj.toFixed(1)}</strong><span>${delta>=0?'+':''}${delta.toFixed(1)} edge</span></div>
+    <div class="value-model"><div><span>Ước tính team value đối thủ</span><strong>${fmtMoney(valueModel.total*10)}</strong><small>Squad hiện tại ${fmtMoney(valueModel.market*10)}${valueModel.bank!=null?` • Bank ${fmtMoney(valueModel.bank*10)}`:''}</small></div><div><span>So với squad bạn</span><strong>${valuation.gap>=0?'+':''}£${valuation.gap.toFixed(1)}m</strong><small>Trend khai báo: ${trendText}</small></div></div>
+    <div class="value-note">${escapeHtml(valuation.reason)} Đây là ước lượng từ picks public, giá hiện tại và history; không phải selling price chính xác.</div>
     <div class="captain-battle">Captain: <strong>${escapeHtml(myCap)}</strong> vs <strong>${escapeHtml(opCap)}</strong></div>
     <div class="strategy-card ${strat.mode.toLowerCase()}"><b>${strat.mode}</b><span>${strat.text}</span></div>
     <div class="muted small">Win probability là heuristic từ projected points/start confidence/fixtures, không phải xác suất official.</div>`;

@@ -88,6 +88,7 @@ USER_AGENT=FPL-Master-Dashboard/0.1
 - Club-colour shirt cards on the pitch and bench.
 - Current local squad override for Mosquera → Konsa and Igor Jesus → Wissa until public GW4 picks become available.
 - H2H projected score, heuristic win/draw/loss probability, captain battle, biggest swings, and SAFE/BALANCED/AGGRESSIVE strategy suggestion.
+- H2H opponent team-value model: current public squad value, declared team value/bank, GW-over-GW value trend, and budget-aware suggestions that do not blindly copy the opponent.
 
 ## v3 — H2H Recommendation Engine
 
