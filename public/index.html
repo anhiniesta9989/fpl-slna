@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>FPL Master Dashboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">UNOFFICIAL FPL CONTROL CENTRE</div>
+        <h1>FPL Master Dashboard</h1>
+        <p class="muted">Live squad • 4–6 GW hold score • transfer planner • H2H • Challenge</p>
+      </div>
+      <div class="toolbar">
+        <label class="input-wrap">Team ID
+          <input id="teamId" inputmode="numeric" value="2320843" aria-label="FPL Team ID" />
+        </label>
+        <button id="loadBtn" class="btn primary">Tải đội</button>
+        <button id="demoBtn" class="btn ghost">Demo offline</button>
+      </div>
+    </header>
+
+    <div id="statusBar" class="status-bar">Đang khởi tạo…</div>
+
+    <nav class="tabs" aria-label="Dashboard tabs">
+      <button class="tab active" data-tab="overview">FPL</button>
+      <button class="tab" data-tab="transfers">Transfers</button>
+      <button class="tab" data-tab="h2h">H2H</button>
+      <button class="tab" data-tab="challenge">Challenge</button>
+    </nav>
+
+    <main>
+      <section id="overview" class="tab-panel active">
+        <div class="summary-grid">
+          <article class="card quick-card">
+            <div class="card-title">Quyết định nhanh</div>
+            <div id="quickDecision" class="decision">—</div>
+            <div id="decisionReason" class="muted small">—</div>
+          </article>
+          <article class="card metric-card"><span>GW</span><strong id="metricGw">—</strong><small id="metricDeadline">—</small></article>
+          <article class="card metric-card"><span>Điểm</span><strong id="metricPoints">—</strong><small id="metricRank">—</small></article>
+          <article class="card metric-card"><span>Team value</span><strong id="metricValue">—</strong><small id="metricBank">—</small></article>
+          <article class="card metric-card"><span>FT</span><strong id="metricFt">3</strong><small>Manual/public API không cung cấp FT hiện tại</small></article>
+        </div>
+
+        <div class="content-grid">
+          <article class="card pitch-card">
+            <div class="card-head">
+              <div><div class="card-title">Đội hình chốt</div><div id="squadSource" class="muted small">—</div></div>
+              <div class="badge" id="formationBadge">—</div>
+            </div>
+            <div id="pitch" class="pitch"></div>
+            <div id="bench" class="bench"></div>
+            <div id="captainLine" class="captain-line"></div>
+          </article>
+
+          <article class="card manager-card">
+            <div class="card-title">Manager</div>
+            <div id="managerInfo" class="manager-info"></div>
+            <hr />
+            <label class="slider-label">Free Transfers (manual)
+              <input id="ftInput" type="number" min="0" max="5" value="3" />
+            </label>
+            <p class="muted small">Public FPL endpoints không tiết lộ chính xác FT trước deadline. Giá trị này được lưu cục bộ trên trình duyệt.</p>
+          </article>
+        </div>
+
+        <article class="card table-card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Bảng đánh giá 15 cầu thủ</div>
+              <div class="muted small">Start confidence và Hold 4–6GW là heuristic của dashboard, không phải chỉ số chính thức.</div>
+            </div>
+            <div class="legend"><span>🔒 Core</span><span>⚠️ Watch</span><span>⬇ Sell</span></div>
+          </div>
+          <div class="table-scroll">
+            <table id="playerTable">
+              <thead><tr><th>Cầu thủ</th><th>CLB</th><th>Fixture</th><th>Giá</th><th>Own%</th><th>xGI</th><th>Start conf.</th><th>Hold 4–6GW</th><th>Tín hiệu</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section id="transfers" class="tab-panel">
+        <div class="content-grid two">
+          <article class="card">
+            <div class="card-title">Transfer planner</div>
+            <p class="muted small">Không ghi transfer lên FPL. Chỉ mô phỏng và lưu kế hoạch local.</p>
+            <div class="form-grid">
+              <label>OUT<select id="transferOut"></select></label>
+              <label>IN<select id="transferIn"></select></label>
+            </div>
+            <div id="transferPreview" class="transfer-preview"></div>
+            <button id="addTransferBtn" class="btn primary">Thêm vào kế hoạch</button>
+            <button id="clearTransfersBtn" class="btn ghost">Xóa kế hoạch</button>
+          </article>
+          <article class="card">
+            <div class="card-title">Kế hoạch đang lưu</div>
+            <div id="plannedTransfers" class="planned"></div>
+          </article>
+        </div>
+
+        <article class="card pitch-card">
+          <div class="card-head"><div class="card-title">Đội hình sau transfer</div><div id="plannedFormationBadge" class="badge">—</div></div>
+          <div id="plannedPitch" class="pitch"></div>
+        </article>
+      </section>
+
+      <section id="h2h" class="tab-panel">
+        <div class="content-grid two">
+          <article class="card">
+            <div class="card-title">So sánh H2H</div>
+            <label>Opponent Team ID<input id="opponentId" inputmode="numeric" placeholder="Nhập Team ID đối thủ" /></label>
+            <button id="loadOpponentBtn" class="btn primary">So sánh</button>
+            <p class="muted small">Dùng public picks của Gameweek gần nhất. Nếu GW đang live, dashboard cộng điểm live theo multiplier.</p>
+          </article>
+          <article class="card" id="h2hSummary"><div class="empty">Chưa tải đối thủ.</div></article>
+        </div>
+        <article class="card table-card"><div class="card-title">Differentials</div><div id="differentials" class="diff-grid"></div></article>
+
+        <article class="card table-card recommendation-card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Recommendation Engine</div>
+              <div class="muted small">Tách riêng quyết định H2H hiện tại và chiến lược 4–6GW / cả mùa. Không khuyên transfer chỉ để cover đối thủ.</div>
+            </div>
+            <div id="recommendationMode" class="badge">—</div>
+          </div>
+          <div id="h2hRecommendations" class="recommend-grid">
+            <div class="empty">Tải đối thủ để nhận recommendation.</div>
+          </div>
+        </article>
+      </section>
+
+      <section id="challenge" class="tab-panel">
+        <div class="content-grid two">
+          <article class="card">
+            <div class="card-title">FPL Challenge — rule card</div>
+            <p class="muted small">Challenge API/rules thay đổi theo GW. MVP không tự đoán luật; bạn có thể nhập rule đã xác minh từ official.</p>
+            <div class="form-grid challenge-form">
+              <label>Tên challenge<input id="challengeName" value="Derby Day" /></label>
+              <label>Số cầu thủ<input id="challengeSize" type="number" min="1" max="15" value="6" /></label>
+              <label>Max/CLB<input id="challengeClubMax" type="number" min="1" max="15" value="3" /></label>
+              <label>Budget<input id="challengeBudget" value="Unlimited" /></label>
+              <label class="wide">Multiplier / scoring<input id="challengeRule" value="MCI + MUN players x2; captain x2" /></label>
+            </div>
+            <button id="saveChallengeBtn" class="btn primary">Lưu rule local</button>
+          </article>
+          <article class="card">
+            <div class="card-title">Challenge checklist</div>
+            <ol class="checklist">
+              <li>✓ Số cầu thủ</li><li>✓ Formation hợp lệ</li><li>✓ Budget</li><li>✓ Max cầu thủ/CLB</li><li>✓ Multiplier/scoring</li>
+            </ol>
+            <p class="muted small">Mục tiêu là không chốt Challenge nếu thiếu một trong 5 mục này.</p>
+          </article>
+        </div>
+        <article class="card pitch-card">
+          <div class="card-head"><div class="card-title">Challenge draft</div><button id="loadChallengeDraftBtn" class="btn ghost">Nạp draft GW4</button></div>
+          <div id="challengePitch" class="pitch compact"></div>
+        </article>
+      </section>
+    </main>
+
+    <footer>
+      Unofficial tool. Dữ liệu FPL lấy từ public endpoints của fantasy.premierleague.com. Không lưu mật khẩu/cookie FPL và không tự thực hiện transfer.
+    </footer>
+  </div>
+  <script src="/demo-data.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

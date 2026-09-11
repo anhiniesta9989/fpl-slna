@@ -1,0 +1,14 @@
+{
+  "name": "fpl-master-dashboard",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "check": "node --check server.mjs && node --check public/app.js && node --check public/demo-data.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
